@@ -7,6 +7,10 @@ const {
   updateTask,
   deleteTask
 } = require('../controllers/taskController');
+const { protect } = require('../middleware/authMiddleware');
+
+// 所有任务路由都需要认证
+router.use(protect);
 
 // 获取所有任务和创建新任务
 router.route('/')
