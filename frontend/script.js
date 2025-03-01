@@ -1,23 +1,12 @@
-console.log('script.js 已成功加载！');
+// API基地址
+const API_BASE_URL = 'http://localhost:5000/api';
 
-// DOM元素
-const addTaskForm = document.getElementById('addTaskForm');
-const tasksList = document.getElementById('tasksList');
-const currentDateElement = document.getElementById('currentDate');
-const taskModal = document.getElementById('taskModal');
-const modalTaskTitle = document.getElementById('modalTaskTitle');
-const modalTaskDescription = document.getElementById('modalTaskDescription');
-const modalTaskDueDate = document.getElementById('modalTaskDueDate');
-const completeTaskBtn = document.getElementById('completeTaskBtn');
-const deleteTaskBtn = document.getElementById('deleteTaskBtn');
-const filterButtons = document.querySelectorAll('.filter-btn');
-
-// 用户信息和当前时间
+// 当前用户信息和时间
 const currentUser = 'luozijian1223';
-const currentDateTime = new Date('2025-02-28 09:55:56');
+const currentDateTime = new Date('2025-02-28 13:29:33');
 
 // 存储待办事项
-let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+let tasks = [];
 let currentFilter = 'all';
 let currentTaskId = null;
 
@@ -40,7 +29,100 @@ function showCurrentDate() {
         month: 'long',
         day: 'numeric'
     };
-    currentDateElement.textContent = currentDateTime.toLocaleDateString('zh-CN', options);
+    document.getElementById('currentDate').textContent = currentDateTime.toLocaleDateString('zh-CN', options);
+}
+
+// 获取认证头
+function getAuthHeaders() {
+    const token = localStorage.getItem('token');
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : ''
+    };
+}
+
+// 从API获取任务
+async function fetchTasks() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/tasks`, {
+            headers: getAuthHeaders(),
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            if (response.status === 401) {
+                // 认证失败，重定向到登录页面
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                window.location.href = 'login.html';
+                return;
+            }
+            throw new Error('获取任务失败');
+        }
+        
+        const data = await response.json();
+        tasks = data;
+        renderTasks();
+    } catch (error) {
+        console.error('Error fetching tasks:', error);
+        // 如果API请求失败，尝试从本地存储加载
+        const localTasks = JSON.parse(localStorage.getItem('tasks') || '[]');
+        if (localTasks.length > 0) {
+            tasks = localTasks;
+            renderTasks();
+        }
+    }
+}
+
+// 添加新任务
+async function addTask(title, description, dueDate, dueTime) {
+    try {
+        const dueDateTimeStr = `${dueDate}T${dueTime}:00`;
+        
+        const response = await fetch(`${API_BASE_URL}/tasks`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+                title,
+                description,
+                dueDate: dueDateTimeStr
+            }),
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            if (response.status === 401) {
+                // 认证失败，重定向到登录页面
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                window.location.href = 'login.html';
+                return null;
+            }
+            throw new Error('添加任务失败');
+        }
+        
+        const newTask = await response.json();
+        tasks.unshift(newTask); // 添加到数组开头
+        renderTasks();
+        
+        return newTask;
+    } catch (error) {
+        console.error('Error adding task:', error);
+        // 后备方案：使用本地存储
+        const id = generateId();
+        const task = {
+            id,
+            title,
+            description,
+            dueDate: `${dueDate} ${dueTime}`,
+            completed: false,
+            createdAt: new Date().toISOString()
+        };
+        tasks.push(task);
+        localStorage.setItem('tasks', JSON.stringify(tasks));
+        renderTasks();
+        return task;
+    }
 }
 
 // 生成唯一ID
@@ -48,38 +130,78 @@ function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
 
-// 添加新任务
-function addTask(title, description, dueDate, dueTime) {
-    const id = generateId();
-    const task = {
-        id,
-        title,
-        description,
-        dueDate: `${dueDate} ${dueTime}`,
-        completed: false,
-        createdAt: currentDateTime.toISOString()
-    };
-    tasks.push(task);
-    localStorage.setItem('tasks', JSON.stringify(tasks));
-    renderTasks();
-    return task;
-}
-
 // 完成任务
-function completeTask(id) {
-    const taskIndex = tasks.findIndex(task => task.id === id);
-    if (taskIndex !== -1) {
-        tasks[taskIndex].completed = !tasks[taskIndex].completed;
-        localStorage.setItem('tasks', JSON.stringify(tasks));
+async function completeTask(id) {
+    try {
+        const task = tasks.find(t => t._id === id || t.id === id);
+        if (!task) return;
+        
+        const updatedTask = { ...task, completed: !task.completed };
+        
+        const response = await fetch(`${API_BASE_URL}/tasks/${id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ completed: updatedTask.completed }),
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            if (response.status === 401) {
+                // 认证失败，重定向到登录页面
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                window.location.href = 'login.html';
+                return;
+            }
+            throw new Error('更新任务失败');
+        }
+        
+        // 更新本地任务列表
+        const taskIndex = tasks.findIndex(t => t._id === id || t.id === id);
+        tasks[taskIndex].completed = updatedTask.completed;
         renderTasks();
+    } catch (error) {
+        console.error('Error updating task:', error);
+        // 后备方案：使用本地存储
+        const taskIndex = tasks.findIndex(task => task._id === id || task.id === id);
+        if (taskIndex !== -1) {
+            tasks[taskIndex].completed = !tasks[taskIndex].completed;
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+            renderTasks();
+        }
     }
 }
 
 // 删除任务
-function deleteTask(id) {
-    tasks = tasks.filter(task => task.id !== id);
-    localStorage.setItem('tasks', JSON.stringify(tasks));
-    renderTasks();
+async function deleteTask(id) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/tasks/${id}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders(),
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            if (response.status === 401) {
+                // 认证失败，重定向到登录页面
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                window.location.href = 'login.html';
+                return;
+            }
+            throw new Error('删除任务失败');
+        }
+        
+        // 从本地任务列表移除
+        tasks = tasks.filter(task => task._id !== id && task.id !== id);
+        renderTasks();
+    } catch (error) {
+        console.error('Error deleting task:', error);
+        // 后备方案：使用本地存储
+        tasks = tasks.filter(task => task._id !== id && task.id !== id);
+        localStorage.setItem('tasks', JSON.stringify(tasks));
+        renderTasks();
+    }
 }
 
 // 检查任务是否过期
@@ -90,6 +212,9 @@ function isTaskOverdue(dueDate) {
 
 // 渲染任务列表
 function renderTasks() {
+    const tasksList = document.getElementById('tasksList');
+    if (!tasksList) return; // 如果不在任务页面，直接返回
+    
     tasksList.innerHTML = '';
     
     let filteredTasks = tasks;
@@ -121,7 +246,7 @@ function renderTasks() {
         checkbox.className = 'task-checkbox';
         checkbox.checked = task.completed;
         checkbox.addEventListener('change', () => {
-            completeTask(task.id);
+            completeTask(task._id || task.id);
         });
         checkbox.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -141,7 +266,7 @@ function renderTasks() {
         taskItem.appendChild(taskContent);
         
         taskItem.addEventListener('click', () => {
-            showTaskDetails(task.id);
+            showTaskDetails(task._id || task.id);
         });
         
         tasksList.appendChild(taskItem);
@@ -150,30 +275,32 @@ function renderTasks() {
 
 // 显示任务详情
 function showTaskDetails(id) {
-    const task = tasks.find(task => task.id === id);
+    const task = tasks.find(task => task._id === id || task.id === id);
     if (!task) return;
     
     currentTaskId = id;
-    modalTaskTitle.textContent = task.title;
-    modalTaskDescription.textContent = task.description || '没有描述';
+    
+    document.getElementById('modalTaskTitle').textContent = task.title;
+    document.getElementById('modalTaskDescription').textContent = task.description || '没有描述';
     
     const dueDate = new Date(task.dueDate);
-    modalTaskDueDate.textContent = `截止时间: ${dueDate.toLocaleDateString('zh-CN')} ${dueDate.toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}`;
+    document.getElementById('modalTaskDueDate').textContent = `截止时间: ${dueDate.toLocaleDateString('zh-CN')} ${dueDate.toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}`;
     
-    completeTaskBtn.textContent = task.completed ? '标记为未完成' : '标记为完成';
+    document.getElementById('completeTaskBtn').textContent = task.completed ? '标记为未完成' : '标记为完成';
     
-    taskModal.style.display = 'block';
+    document.getElementById('taskModal').style.display = 'block';
 }
 
 // 关闭模态框
 function closeTaskModal() {
-    taskModal.style.display = 'none';
+    document.getElementById('taskModal').style.display = 'none';
     currentTaskId = null;
 }
 
 // 应用过滤器
 function applyFilter(filter) {
     currentFilter = filter;
+    const filterButtons = document.querySelectorAll('.filter-btn');
     filterButtons.forEach(btn => {
         if (btn.dataset.filter === filter) {
             btn.classList.add('active');
@@ -184,25 +311,66 @@ function applyFilter(filter) {
     renderTasks();
 }
 
-// 初始化
-function init() {
-    console.log('初始化应用...');
-    showCurrentDate();
-    renderTasks();
-    
-    // 添加任务表单提交事件
-    addTaskForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const title = document.getElementById('taskTitle').value;
-        const description = document.getElementById('taskDescription').value;
-        const dueDate = document.getElementById('dueDate').value;
-        const dueTime = document.getElementById('dueTime').value;
-        
-        addTask(title, description, dueDate, dueTime);
-        addTaskForm.reset();
+// 检查即将到期的任务
+// 可以简化为仅在UI显示提醒
+function checkDueTasks() {
+    const activeTasks = tasks.filter(task => !task.completed);
+    const comingDueTasks = activeTasks.filter(task => {
+        const dueDate = new Date(task.dueDate);
+        const timeDiff = dueDate - currentDateTime;
+        return timeDiff > 0 && timeDiff < 24 * 60 * 60 * 1000;
     });
     
+    if (comingDueTasks.length > 0) {
+        // 只在UI上显示提醒，不发送邮件
+        const userDisplay = document.querySelector('.user-display');
+        if (userDisplay) {
+            const reminderBadge = document.createElement('span');
+            reminderBadge.className = 'reminder-badge';
+            reminderBadge.textContent = comingDueTasks.length;
+            reminderBadge.style.backgroundColor = '#ff4757';
+            reminderBadge.style.color = 'white';
+            reminderBadge.style.borderRadius = '50%';
+            reminderBadge.style.padding = '2px 6px';
+            reminderBadge.style.marginLeft = '5px';
+            reminderBadge.style.fontSize = '12px';
+            
+            userDisplay.appendChild(reminderBadge);
+        }
+    }
+}
+
+// 初始化
+function init() {
+    showCurrentDate();
+    
+    // 检查是否已登录
+    const token = localStorage.getItem('token');
+    if (!token) {
+        window.location.href = 'login.html';
+        return;
+    }
+    
+    // 获取任务列表
+    fetchTasks();
+    
+    // 添加任务表单提交事件
+    const addTaskForm = document.getElementById('addTaskForm');
+    if (addTaskForm) {
+        addTaskForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const title = document.getElementById('taskTitle').value;
+            const description = document.getElementById('taskDescription').value;
+            const dueDate = document.getElementById('dueDate').value;
+            const dueTime = document.getElementById('dueTime').value;
+            
+            addTask(title, description, dueDate, dueTime);
+            addTaskForm.reset();
+        });
+    }
+    
     // 过滤按钮点击事件
+    const filterButtons = document.querySelectorAll('.filter-btn');
     filterButtons.forEach(btn => {
         btn.addEventListener('click', () => {
             applyFilter(btn.dataset.filter);
@@ -210,58 +378,56 @@ function init() {
     });
     
     // 模态框关闭按钮事件
-    document.querySelector('.close-button').addEventListener('click', closeTaskModal);
+    const closeButton = document.querySelector('.close-button');
+    if (closeButton) {
+        closeButton.addEventListener('click', closeTaskModal);
+    }
     
     // 点击模态框外部关闭模态框
     window.addEventListener('click', (e) => {
-        if (e.target === taskModal) {
+        const modal = document.getElementById('taskModal');
+        if (e.target === modal) {
             closeTaskModal();
         }
     });
     
     // 完成任务按钮事件
-    completeTaskBtn.addEventListener('click', () => {
-        if (currentTaskId) {
-            completeTask(currentTaskId);
-            closeTaskModal();
-        }
-    });
+    const completeTaskBtn = document.getElementById('completeTaskBtn');
+    if (completeTaskBtn) {
+        completeTaskBtn.addEventListener('click', () => {
+            if (currentTaskId) {
+                completeTask(currentTaskId);
+                closeTaskModal();
+            }
+        });
+    }
     
     // 删除任务按钮事件
-    deleteTaskBtn.addEventListener('click', () => {
-        if (currentTaskId) {
-            deleteTask(currentTaskId);
-            closeTaskModal();
-        }
-    });
+    const deleteTaskBtn = document.getElementById('deleteTaskBtn');
+    if (deleteTaskBtn) {
+        deleteTaskBtn.addEventListener('click', () => {
+            if (currentTaskId) {
+                deleteTask(currentTaskId);
+                closeTaskModal();
+            }
+        });
+    }
     
-    // 显示用户名
-    document.querySelector('.user-display').textContent = `你好，${currentUser}`;
+    // 更新用户信息显示
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const userDisplay = document.querySelector('.user-display');
+    if (userDisplay) {
+        userDisplay.textContent = `你好，${user.username || currentUser}`;
+    }
     
     // 检查并提醒即将到期的任务
     checkDueTasks();
 }
 
-// 检查即将到期的任务
-function checkDueTasks() {
-    const activeTasks = tasks.filter(task => !task.completed);
-    const comingDueTasks = activeTasks.filter(task => {
-        const dueDate = new Date(task.dueDate);
-        const timeDiff = dueDate - currentDateTime;
-        // 如果任务将在24小时内到期
-        return timeDiff > 0 && timeDiff < 24 * 60 * 60 * 1000;
-    });
-    
-    if (comingDueTasks.length > 0) {
-        alert(`你有 ${comingDueTasks.length} 个任务即将到期！`);
-    }
-}
-
 // 启动应用
 document.addEventListener('DOMContentLoaded', init);
 
-// 在文件末尾添加以下代码确认文件加载完成
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM 已完全加载，应用初始化中...');
-    // 应用已经通过最后的 init() 函数启动
-});
+// 添加测试路由
+app.get('/api/test', (req, res) => {
+    res.json({ message: 'API 连接测试成功!' });
+  });

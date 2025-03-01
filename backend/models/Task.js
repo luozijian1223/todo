@@ -1,12 +1,11 @@
 const mongoose = require('mongoose');
 
-// 定义任务的数据模型
 const taskSchema = mongoose.Schema(
   {
     user: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
       required: true,
-      default: 'luozijian1223'
+      ref: 'User' // 关联到User模型
     },
     title: {
       type: String,
@@ -25,7 +24,7 @@ const taskSchema = mongoose.Schema(
     }
   },
   {
-    timestamps: true // 自动添加 createdAt 和 updatedAt 字段
+    timestamps: true
   }
 );
 

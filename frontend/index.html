@@ -4,14 +4,80 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>简易待办事项</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="./style.css">
+    <style>
+        /* 导航栏样式 */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #3a80d2;
+            padding: 10px 20px;
+            color: white;
+        }
+        
+        .nav-brand {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        
+        .nav-user {
+            display: flex;
+            align-items: center;
+        }
+        
+        .nav-user button {
+            margin-left: 15px;
+            padding: 5px 10px;
+            background-color: #2c6cb2;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+        }
+        
+        .nav-user button:hover {
+            background-color: #245592;
+        }
+        
+        /* 修改头部样式，移除冗余信息 */
+        header {
+            position: relative;
+        }
+        
+        .auth-buttons {
+            display: none; /* 默认隐藏，根据用户登录状态显示 */
+        }
+        
+        .auth-buttons a {
+            display: inline-block;
+            padding: 5px 10px;
+            background-color: #2c6cb2;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+    </style>
 </head>
 <body>
+    <!-- 导航栏 -->
+    <div class="navbar">
+        <div class="nav-brand">我的待办事项</div>
+        <div class="nav-user" id="userNav">
+            <span class="user-display">你好，游客</span>
+            <div class="auth-buttons" id="authButtons">
+                <a href="login.html">登录</a>
+                <a href="register.html">注册</a>
+            </div>
+            <button id="logoutButton" style="display: none;">登出</button>
+        </div>
+    </div>
+
     <div class="container">
         <header>
             <h1>我的待办事项</h1>
             <p class="date-display" id="currentDate"></p>
-            <p class="user-display">你好，luozijian1223</p>
         </header>
 
         <div class="add-task-container">
@@ -66,6 +132,36 @@
         </div>
     </div>
 
+    <script src="auth.js"></script>
     <script src="script.js"></script>
+    <script>
+        // 检查用户登录状态并更新界面
+        function updateAuthUI() {
+            const token = localStorage.getItem('token');
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            const logoutButton = document.getElementById('logoutButton');
+            const authButtons = document.getElementById('authButtons');
+            const userDisplay = document.querySelector('.user-display');
+            
+            if (token && user.username) {
+                // 已登录状态
+                userDisplay.textContent = `你好，${user.username}`;
+                logoutButton.style.display = 'block';
+                authButtons.style.display = 'none';
+            } else {
+                // 未登录状态
+                userDisplay.textContent = '你好，游客';
+                logoutButton.style.display = 'none';
+                authButtons.style.display = 'block';
+            }
+        }
+        
+        // 页面加载时更新UI
+        document.addEventListener('DOMContentLoaded', function() {
+            updateAuthUI();
+        });
+    </script>
+    <script src="debug.js"></script>
+    
 </body>
 </html>

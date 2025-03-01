@@ -1,6 +1,6 @@
-.\backend\.env
+./backend/.env
 Thumbs.db
-.\node_modules
+./node_modules
 .vscode
 *.log
 *.tmp
